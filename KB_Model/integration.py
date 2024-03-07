@@ -23,6 +23,8 @@ Functionality to implement:
 # Type definitions
 Dfunc = Callable[[float, NDArray], NDArray]
 
+Klist = tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
+RcontList = tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
 EPS = 1e-16  # TODO: specify
 
 
@@ -40,31 +42,37 @@ def stepper_dopr_853(x0: float, x1: float, h0: float, y0: NDArray, atol: float, 
     xs = [x]
 
     while True:
-        x, xold, y, dydx, h, errold = step(x=x, y=y, dydx=dydx, h_try=h, derivs=derivs, atol=atol, rtol=rtol, errold=errold)
+        xnew, yout, dydxnew, hnext, errold, ks = step(x=x, y=y, dydx=dydx, h_try=h, derivs=derivs, atol=atol, rtol=rtol, errold=errold)
 
-        # TODO: Add other stopping conditions (based on y) here
         if x >= x1:
-            # Interpolate based on y, and save those results ()
+            rcont = prepare_dense(h=h, x=x, y=y, yout=yout, dydx=dydx, dydxnew=dydxnew, ks=ks, derivs=derivs)
+            yval = evaluate_dense(i=None, x=x1, xold=x, h=h, rcont=rcont)
+            xs.append(x1)
+            ys.append(yval)
             break
 
         ys.append(y)
         xs.append(x)
+
+        h = hnext
+        xold = x
+        x = xnew
+        y = yout
+        dydx = dydxnew
     return xs, ys
 
 
 @numba.jit(nopython=True)
-def step(x: float, y: NDArray, dydx: NDArray, h_try: float, derivs: Dfunc, atol: float, rtol: float, errold: float):
+def step(x: float, y: NDArray, dydx: NDArray, h_try: float, derivs: Dfunc, atol: float, rtol: float, errold: float) -> tuple[float, NDArray, NDArray, float, float, Klist]:
     reject = False  # Should be False (since the previous step succeeded)
 
     h = h_try
-    hnext = 0  # Some initial value ?
+    hnext = 0.0  # Some initial value ?
     while True:
-        print("Step", x, "h", h)
-        yout, yerr, yerr2 = dy(x, y, dydx, h, derivs)
+        yout, yerr, yerr2, ks = dy(x, y, dydx, h, derivs)
         err = error(h=h, atol=atol, rtol=rtol, yerr=yerr, yerr2=yerr2, y=y, yout=yout)
-        print(err)
         success, h, hnext, errold, reject = controller_success(err, errold, h, reject)
-        print(success, h, hnext, errold, reject)
+        # print(success, h, hnext, errold, reject)
         if success:
             break
         if np.abs(h) <= np.abs(x) * EPS:
@@ -74,7 +82,8 @@ def step(x: float, y: NDArray, dydx: NDArray, h_try: float, derivs: Dfunc, atol:
     # Maybe store the new h:  hdid = h ?
 
     # Return the 'new': x, xold, y, dydx
-    return x + h, x, yout, dydxnew, hnext, errold
+
+    return x + h, yout, dydxnew, hnext, errold, ks
 
 
 @numba.jit(nopython=True)
@@ -125,7 +134,7 @@ def error(h: float, atol: float, rtol: float, yerr: NDArray, yerr2: NDArray, y: 
 
 
 @numba.jit(nopython=True)
-def dy(x: float, y: NDArray, dydx: NDArray, h: float, derivs: Dfunc) -> tuple[NDArray, NDArray, NDArray]:
+def dy(x: float, y: NDArray, dydx: NDArray, h: float, derivs: Dfunc) -> tuple[NDArray, NDArray, NDArray, Klist]:
     k2 = derivs(x + c2 * h, y + h * a21 * dydx)
     k3 = derivs(x + c3 * h, y + h * (a31 * dydx + a32 * k2))
     k4 = derivs(x + c4 * h, y + h * (a41 * dydx + a43 * k3))
@@ -145,7 +154,49 @@ def dy(x: float, y: NDArray, dydx: NDArray, h: float, derivs: Dfunc) -> tuple[ND
     # Two error estimators.
     yerr = k4 - bhh1 * dydx - bhh2 * k9 - bhh3 * k3
     yerr2 = er1 * dydx + er6 * k6 + er7 * k7 + er8 * k8 + er9 * k9 + er10 * k10 + er11 * k2 + er12 * k3
-    return yout, yerr, yerr2
+    ks = (k2, k3, k4, k5, k6, k7, k8, k9, k10)
+    return yout, yerr, yerr2, ks
+
+
+@numba.jit(nopython=True)
+def prepare_dense(h: float, x: float, y: NDArray, yout: NDArray, dydx: NDArray, dydxnew: NDArray, ks: Klist, derivs: Dfunc) -> RcontList:
+    k2, k3, k4, k5, k6, k7, k8, k9, k10 = ks
+    # Prepare stuff
+    rcont1 = y
+    ydiff = yout - y
+    rcont2 = ydiff
+    bspl = h * dydx - ydiff
+    rcont3 = bspl
+    rcont4 = ydiff - h * dydxnew - bspl
+    rcont5 = d41 * dydx + d46 * k6 + d47 * k7 + d48 * k8 + d49 * k9 + d410 * k10 + d411 * k2 + d412 * k3
+    rcont6 = d51 * dydx + d56 * k6 + d57 * k7 + d58 * k8 + d59 * k9 + d510 * k10 + d511 * k2 + d512 * k3
+    rcont7 = d61 * dydx + d66 * k6 + d67 * k7 + d68 * k8 + d69 * k9 + d610 * k10 + d611 * k2 + d612 * k3
+    rcont8 = d71 * dydx + d76 * k6 + d77 * k7 + d78 * k8 + d79 * k9 + d710 * k10 + d711 * k2 + d712 * k3
+
+    k10 = derivs(x + c14 * h, y + h * (a141 * dydx + a147 * k7 + a148 * k8 + a149 * k9 + a1410 * k10 + a1411 * k2 + a1412 * k3 + a1413 * dydxnew))
+    k2 = derivs(x + c15 * h, y + h * (a151 * dydx + a156 * k6 + a157 * k7 + a158 * k8 + a1511 * k2 + a1512 * k3 + a1513 * dydxnew + a1514 * k10))
+    k3 = derivs(x + c16 * h, y + h * (a161 * dydx + a166 * k6 + a167 * k7 + a168 * k8 + a169 * k9 + a1613 * dydxnew + a1614 * k10 + a1615 * k2))
+
+    rcont5 = h * (rcont5 + d413 * dydxnew + d414 * k10 + d415 * k2 + d416 * k3)
+    rcont6 = h * (rcont6 + d513 * dydxnew + d514 * k10 + d515 * k2 + d516 * k3)
+    rcont7 = h * (rcont7 + d613 * dydxnew + d614 * k10 + d615 * k2 + d616 * k3)
+    rcont8 = h * (rcont8 + d713 * dydxnew + d714 * k10 + d715 * k2 + d716 * k3)
+
+    return rcont1, rcont2, rcont3, rcont4, rcont5, rcont6, rcont7, rcont8
+
+
+@numba.jit(nopython=True)
+def evaluate_dense(i: int | None, x: float, xold: float, h: float, rcont: RcontList) -> NDArray:
+    """
+    Evaluate a the cubic polynomial at x (xold <= x <= xold + h) for y[i]
+    """
+    rcont1, rcont2, rcont3, rcont4, rcont5, rcont6, rcont7, rcont8 = rcont
+
+    s = (x - xold) / h
+    s1 = 1.0 - s
+    if i is None:
+        return rcont1 + s * (rcont2 + s1 * (rcont3 + s * (rcont4 + s1 * (rcont5 + s * (rcont6 + s1 * (rcont7 + s * rcont8))))))
+    return np.array(rcont1[i] + s * (rcont2[i] + s1 * (rcont3[i] + s * (rcont4[i] + s1 * (rcont5[i] + s * (rcont6[i] + s1 * (rcont7[i] + s * rcont8[i])))))))
 
 
 ######################## CONSTANTS ##############################

@@ -16,6 +16,7 @@ def analytic(x, v0, x0):
 
 
 def main():
+    # Simulating a classic balistic trajectory
     v0 = 100.0
     x0 = 0.0
     lims = (0, 100)
@@ -27,7 +28,7 @@ def main():
     x_interval = np.linspace(*lims, 100)
     y_ref = analytic(x_interval, v0, x0)
     height = [y[0] for y in ys]
-    vel = [y[1] for y in ys]
+    # vel = [y[1] for y in ys]
 
     fig, ax = plt.subplots(2, 1)
     ax[0].plot(xs, height)
@@ -36,6 +37,7 @@ def main():
     rel_error = (height - analytic(np.array(xs), v0, x0)) / analytic(np.array(xs), v0, x0)
     ax[1].plot(xs, rel_error)
     ax[1].axhline(0, c="k", ls="--")
+    ax[1].set_yscale("log")
 
     plt.show()
 
