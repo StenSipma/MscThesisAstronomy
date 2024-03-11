@@ -1,7 +1,22 @@
+import myutils
 import numba
 import numpy as np
 
-import myutils
+
+def test_find_root_secant():
+    @numba.jit(nopython=True)
+    def test_func(x):
+        return x - 1
+
+    found_x = myutils.find_root_secant(test_func, 10, -10, tol=1e-6)
+    assert abs(found_x - 1) <= 1e-6
+
+    @numba.jit(nopython=True)
+    def test_func_2(x):
+        return x + 1
+
+    found_x = myutils.find_root_secant(test_func_2, 2e-3 - 1, -1e-3 - 1, tol=1e-6)
+    assert abs(found_x + 1) <= 1e-6
 
 
 def test_find_segment():
@@ -75,3 +90,4 @@ if __name__ == "__main__":
     test_find_segment()
     test_linear_spline()
     test_bisect()
+    test_find_root_secant()

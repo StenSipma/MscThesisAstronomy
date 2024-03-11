@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+import myutils
 import numba
 import numpy as np
 from numpy.typing import NDArray
@@ -17,15 +18,62 @@ Functionality to implement:
 """
 
 
-# def derivs(x: float, y: NDArray) -> NDArray:
-#     raise NotImplementedError()
-
 # Type definitions
 Dfunc = Callable[[float, NDArray], NDArray]
 
 Klist = tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
 RcontList = tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
 EPS = 1e-16  # TODO: specify
+
+
+@numba.jit(nopython=True)
+def stepper_dopr_853_ystop(x0: float, x1: float, h0: float, y0: NDArray, atol: float, rtol: float, derivs: Dfunc, y1: float):
+    # Integration is from x0 to x1
+    # Maybe OTHER input parameters: initial h, initial errold (?)
+    x = x0
+    y = y0.copy()  # ?
+    h = h0
+    errold = 1e-4
+
+    dydx = derivs(x, y)
+    ys = [y]
+    xs = [x]
+
+    while True:
+        xnew, yout, dydxnew, hnext, errold, ks = step(x=x, y=y, dydx=dydx, h_try=h, derivs=derivs, atol=atol, rtol=rtol, errold=errold)
+
+        if yout[0] < y1:
+            rcont = prepare_dense(h=h, x=x, y=y, yout=yout, dydx=dydx, dydxnew=dydxnew, ks=ks, derivs=derivs)
+
+            def cubic_interp(x_guess: float, args):
+                x, h, rcont = args
+                return evaluate_dense(x=x_guess, xold=x, h=h, rcont=rcont)[0]
+
+            x_root = myutils.find_root_secant(cubic_interp, a=x, b=x + h, args=(x, h, rcont))
+
+            y_ins = np.zeros_like(y)
+            y_ins[0] = y1
+
+            xs.append(x_root)
+            ys.append(y_ins)
+            break
+
+        if x >= x1:
+            rcont = prepare_dense(h=h, x=x, y=y, yout=yout, dydx=dydx, dydxnew=dydxnew, ks=ks, derivs=derivs)
+            yval = evaluate_dense(x=x1, xold=x, h=h, rcont=rcont)
+            xs.append(x1)
+            ys.append(yval)
+            break
+
+        h = hnext
+        xold = x
+        x = xnew
+        y = yout
+        dydx = dydxnew
+
+        ys.append(y)
+        xs.append(x)
+    return xs, ys
 
 
 @numba.jit(nopython=True)
@@ -46,7 +94,7 @@ def stepper_dopr_853(x0: float, x1: float, h0: float, y0: NDArray, atol: float, 
 
         if x >= x1:
             rcont = prepare_dense(h=h, x=x, y=y, yout=yout, dydx=dydx, dydxnew=dydxnew, ks=ks, derivs=derivs)
-            yval = evaluate_dense(i=None, x=x1, xold=x, h=h, rcont=rcont)
+            yval = evaluate_dense(x=x1, xold=x, h=h, rcont=rcont)
             xs.append(x1)
             ys.append(yval)
             break
@@ -87,7 +135,7 @@ def step(x: float, y: NDArray, dydx: NDArray, h_try: float, derivs: Dfunc, atol:
 
 
 @numba.jit(nopython=True)
-def controller_success(err, errold, h, reject):
+def controller_success(err, errold, h, reject) -> tuple[bool, float, float, float, bool]:
     # Maybe specify these yourself ?
     beta = 0.0
     alpha = 1.0 / 8.0 - beta * 0.2
@@ -116,7 +164,9 @@ def controller_success(err, errold, h, reject):
     scale = max(safe * pow(err, -alpha), minscale)
     h *= scale
     reject = True
-    return False, h, None, errold, reject
+
+    # Pass 0.0 as hnext to satisfy the type system
+    return False, h, 0.0, errold, reject
 
 
 @numba.jit(nopython=True)
@@ -186,7 +236,7 @@ def prepare_dense(h: float, x: float, y: NDArray, yout: NDArray, dydx: NDArray, 
 
 
 @numba.jit(nopython=True)
-def evaluate_dense(i: int | None, x: float, xold: float, h: float, rcont: RcontList) -> NDArray:
+def evaluate_dense(x: float, xold: float, h: float, rcont: RcontList) -> NDArray:
     """
     Evaluate a the cubic polynomial at x (xold <= x <= xold + h) for y[i]
     """
@@ -194,9 +244,7 @@ def evaluate_dense(i: int | None, x: float, xold: float, h: float, rcont: RcontL
 
     s = (x - xold) / h
     s1 = 1.0 - s
-    if i is None:
-        return rcont1 + s * (rcont2 + s1 * (rcont3 + s * (rcont4 + s1 * (rcont5 + s * (rcont6 + s1 * (rcont7 + s * rcont8))))))
-    return np.array(rcont1[i] + s * (rcont2[i] + s1 * (rcont3[i] + s * (rcont4[i] + s1 * (rcont5[i] + s * (rcont6[i] + s1 * (rcont7[i] + s * rcont8[i])))))))
+    return rcont1 + s * (rcont2 + s1 * (rcont3 + s * (rcont4 + s1 * (rcont5 + s * (rcont6 + s1 * (rcont7 + s * rcont8))))))
 
 
 ######################## CONSTANTS ##############################

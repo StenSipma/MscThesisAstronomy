@@ -1,7 +1,52 @@
+from itertools import count
 from typing import Callable
 
 import numba
 import numpy as np
+
+
+@numba.jit(nopython=True)
+def relative_tolerance(x, x_new):
+    """
+    Calculate the relative tolerance, given the current (x_new) and previous (x)
+    iteration.
+    """
+    return np.abs((x_new - x) / x_new)
+
+
+@numba.jit(nopython=True)
+def find_root_secant(f, a, b, tol=1e-6, args=None):
+    """
+    Find the root x of f, such that f(x) = 0, using the Secant method.
+
+    Specify the starting interval a, b. And the function f
+
+    The formula for updating x is taken from Kiasulaas p.151
+
+    NOTE: function must have a second argument with 'args'
+    """
+    # Initialize parameters
+    x1 = a
+    x2 = b
+    x_new = 0
+
+    while True:
+        fx2 = f(x2, args)
+        fx1 = f(x1, args)
+
+        # Update x for the new iteration
+        x_new = x2 - fx2 * ((x2 - x1) / (fx2 - fx1))
+
+        # Calculate relative tolerance
+        rtol = relative_tolerance(x2, x_new)
+
+        # Stop if the relative tolerance is low enough
+        if rtol < tol:
+            break
+
+        # Update x's for the next iteration
+        x1, x2 = x2, x_new
+    return x_new
 
 
 @numba.jit(nopython=True)
@@ -74,72 +119,3 @@ def bisect(func: Callable, a: float, b: float, x_tol: float, max_iter=50):
             return rtb
 
     raise RuntimeError("Bisect failed to converge in max number of iterations")
-
-
-def integrate_pressure_mass_rk45(max_iter: int = 100):
-    def func(t, y):
-        return y
-
-    h = 
-
-    y_n = np.array([P0, 0])  # Initial conditions
-    r_n = 0
-    y = [y_n]
-    r = [r_n]
-
-    for i in range(max_iter):
-        k1 = h * func(r_n, y_n)
-        k2 = h * func(r_n + h / 2, y_n + k1 / 2)
-        k3 = h * func(r_n + h / 2, y_n + k2 / 2)
-        k4 = h * func(r_n + h, y_n + k3)
-
-        # Update rule
-        y_n = y_n + (k1 + 2 * k2 + 2 * k3 + k4) / 6
-        r_n += h
-        y.append(y_n)
-        r.append(r_n)
-
-    return np.array(r), np.vstack(y).T  # (r, (P, M))
-
-
-# Only use for initial conditions ???
-def integrate_pressure_rk34(A, eps, sig0, Mtot, P0, nfw_param, h):
-    """
-    'Constants' needed:
-    - A, eps, sig0 -> from initial fit, but after ?
-    - Mtot -> to have a stopping condition
-    - P0 -> A starting point
-    - M0 -> M(0) = 0
-    - nfw_param -> for the potential gradient
-    - h -> step in r
-    """
-    # solve using Runge-Kutta34
-    gamma = 5 / 3
-    r_s, rho_s = nfw_param
-
-    def f(r, y):
-        P, M = y  # Unpack
-        g = -nfw_potential_gradient_scalar_alt(r, r_s=r_s, rho_s=rho_s)
-        #         print(P, M, A, (M / A)**(1/eps) + sig0)
-        frac = (P / ((M / A) ** (1 / eps) + sig0)) ** (1 / gamma)
-        return np.array([g * frac, 4 * np.pi * r**2 * frac])
-
-    y_n = np.array([P0, 0])  # Initial conditions
-    r_n = 0
-    y = [y_n]
-    r = [r_n]
-    print(Mtot)
-    while y_n[1] < Mtot:
-        #         print(r_n, *y_n)
-        k1 = h * f(r_n, y_n)
-        k2 = h * f(r_n + h / 2, y_n + k1 / 2)
-        k3 = h * f(r_n + h / 2, y_n + k2 / 2)
-        k4 = h * f(r_n + h, y_n + k3)
-
-        # Update rule
-        y_n = y_n + (k1 + 2 * k2 + 3 * k3 + k4) / 6
-        r_n += h
-        y.append(y_n)
-        r.append(r_n)
-
-    return np.array(r), np.vstack(y).T  # (r, (P, M))
