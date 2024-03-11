@@ -4,6 +4,16 @@ from typing import Callable
 import numba
 import numpy as np
 
+DEFAULT_DTYPE = np.double
+
+
+def float_array(x, *args, dtype=DEFAULT_DTYPE, **kwargs):
+    return np.array(x, *args, dtype=dtype, **kwargs)
+
+
+def float_asarray(x, *args, dtype=DEFAULT_DTYPE, **kwargs):
+    return np.asarray(x, *args, dtype=dtype, **kwargs)
+
 
 @numba.jit(nopython=True)
 def relative_tolerance(x, x_new):

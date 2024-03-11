@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-import myutils
+import num_utils
 import numba
 import numpy as np
 from numpy.typing import NDArray
@@ -49,7 +49,7 @@ def stepper_dopr_853_ystop(x0: float, x1: float, h0: float, y0: NDArray, atol: f
                 x, h, rcont = args
                 return evaluate_dense(x=x_guess, xold=x, h=h, rcont=rcont)[0]
 
-            x_root = myutils.find_root_secant(cubic_interp, a=x, b=x + h, args=(x, h, rcont))
+            x_root = num_utils.find_root_secant(cubic_interp, a=x, b=x + h, args=(x, h, rcont))
 
             y_ins = np.zeros_like(y)
             y_ins[0] = y1

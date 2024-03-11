@@ -37,10 +37,9 @@ def main():
     ax[0].set_xlabel("time (s)")
     ax[0].legend()
 
-    rel_error = (height - analytic(np.array(xs), v0, x0)) / analytic(np.array(xs), v0, x0)
+    rel_error = np.abs(height - analytic(np.array(xs), v0, x0)) / analytic(np.array(xs), v0, x0)
     ax[1].plot(xs, rel_error)
     ax[1].axhline(0, c="k", ls="--")
-    ax[1].set_yscale("log")
 
     plt.show()
 
