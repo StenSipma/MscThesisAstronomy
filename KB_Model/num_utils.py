@@ -93,7 +93,7 @@ def linear_spline(x: float, x_dat: np.ndarray, y_dat: np.ndarray) -> float:
 
 
 @numba.jit(nopython=True)
-def bisect(func: Callable, a: float, b: float, x_tol: float, max_iter=50):
+def bisect(func: Callable, a: float, b: float, x_tol: float, max_iter=50, args=None):
     """
     Implementation adapted from Numerical Methods 3rd Edition. p449
 
@@ -105,8 +105,8 @@ def bisect(func: Callable, a: float, b: float, x_tol: float, max_iter=50):
         - func(a) and func(b) must have opposite signs
     """
 
-    f = func(a)
-    f_mid = func(b)
+    f = func(a, args)
+    f_mid = func(b, args)
 
     if f * f_mid >= 0.0:
         raise ValueError("f(a) and f(b) must have different signs")
@@ -122,7 +122,7 @@ def bisect(func: Callable, a: float, b: float, x_tol: float, max_iter=50):
     for _ in range(max_iter):
         dx *= 0.5
         x_mid = rtb + dx
-        f_mid = func(x_mid)
+        f_mid = func(x_mid, args)
         if f_mid <= 0.0:
             rtb = x_mid
         if abs(dx) < x_tol or f_mid == 0.0:

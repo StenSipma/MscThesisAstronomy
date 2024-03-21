@@ -52,18 +52,18 @@ class TestUtil(unittest.TestCase):
 
     def test_bisect(self):
         @numba.jit(nopython=True)
-        def test_func(x):
+        def test_func(x, args):
             return x - 1
 
-        found_x = num_utils.bisect(test_func, 10, -10, x_tol=1e-10)
+        found_x = num_utils.bisect(test_func, a=10, b=-10, x_tol=1e-10)
         self.assertTrue(abs(found_x - 1) <= 1e-10)
 
         # Works both ways:
-        found_x = num_utils.bisect(test_func, -10, 10, x_tol=1e-10)
+        found_x = num_utils.bisect(test_func, a=-10, b=10, x_tol=1e-10)
         self.assertTrue(abs(found_x - 1) <= 1e-10)
 
         @numba.jit(nopython=True)
-        def test_func_2(x):
+        def test_func_2(x, args):
             return x
 
         found_x = num_utils.bisect(test_func_2, 1e-10, -1e-10, x_tol=1e-20)
