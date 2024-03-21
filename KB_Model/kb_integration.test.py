@@ -45,6 +45,15 @@ def kb_initial_conditions():
 
     rho_s = rho_crit * delta_c / 4  # Does not use concentration parameter
 
+    # Convert back to right units:
+    M_tot /= 1e8 * cst.solmass
+    R_out /= cst.pc_to_cm
+    r_s /= cst.pc_to_cm
+    rho_s /= cst.proton_mass
+    P_inf_ref /= 1e-13
+    P_0_ref /= 1e-13
+    M /= 1e8 * cst.solmass
+    sig /= 1e30
     return (M_tot, R_out, r_s, rho_s, P_inf_ref, P_0_ref, M, sig)
 
 
@@ -65,7 +74,12 @@ def plot():
 
     fig, ax = plt.subplots(1, 2)
     ax[0].plot(r, P)
+    ax[0].set_ylabel("P [$10^{-13}$ erg / cm3]")
+    ax[0].set_xlabel("r [pc]")
+
     ax[1].plot(r, M)
+    ax[1].set_ylabel(r"M [$10^8 M_\odot$]")
+    ax[1].set_xlabel("r [pc]")
 
     ax[0].set_yscale("log")
     ax[1].set_yscale("log")

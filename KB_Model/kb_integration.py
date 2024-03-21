@@ -31,7 +31,7 @@ def he_derivs(r: float, y: NDArray, args: Dargs) -> NDArray:
 
     g = -nfw_potential_gradient_scalar(r, r_s=r_s, rho_s=rho_s)
     rho = (P / sig) ** (1 / cst.gamma)
-    return np.array([g * rho, 4.0 * np.pi * r**2 * rho])
+    return np.array([g * rho * cst.C4, 4.0 * np.pi * r**2 * rho * cst.C5])
 
 
 @numba.jit(nopython=True, cache=True)
@@ -56,7 +56,7 @@ def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArra
 
     dargs = (M, sig, r_s, rho_s)
     x0 = 0
-    h0 = 1 * cst.pc_to_cm
+    h0 = 1  # UNIT: pc
     i_args = (x0, h0, atol, rtol, he_derivs, dargs, M_tot, P_inf)
 
     # Arguments for the bisect
@@ -273,7 +273,7 @@ def evaluate_dense(x: float, xold: float, h: float, rcont: RcontList) -> NDArray
     return rcont1 + s * (rcont2 + s1 * (rcont3 + s * (rcont4 + s1 * (rcont5 + s * (rcont6 + s1 * (rcont7 + s * rcont8))))))
 
 
-######################## CONSTANTS ##############################
+######################## CONSTANTS for integration ##############################
 c2 = 0.526001519587677318785587544488e-01
 c3 = 0.789002279381515978178381316732e-01
 c4 = 0.118350341907227396726757197510e00
