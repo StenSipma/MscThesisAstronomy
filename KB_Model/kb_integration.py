@@ -7,19 +7,27 @@ import numpy as np
 from models import nfw_potential_gradient_scalar
 from numpy.typing import NDArray
 
+import debug
+
 # Type definitions for the function to be integrated
-Dargs = tuple[NDArray, NDArray, float, float]
-Dfunc = Callable[[float, NDArray, Dargs], NDArray]
+Dargs = None # tuple[NDArray, NDArray, float, float]
+Dfunc = None # Callable[[float, NDArray, Dargs], NDArray]
 
-Iargs = tuple[float, float, float, float, Dfunc, Dargs, float, float]
+# Arguments needed for integration
+Iargs = None #tuple[float, float, float, float, Dfunc, Dargs, float, float]
 
+# List of np arrays storing the k values
+Klist = None #tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
+RcontList = None #tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
+
+DEBUG = True
 
 @numba.jit(nopython=True, cache=True)
 def he_derivs(r: float, y: NDArray, args: Dargs) -> NDArray:
     """
     Derivatives of the equation to be integrated:
-        first argument is dP/dr
-        second argument is dM/dr
+        y[0] P and in the return dP/dr
+        y[1] M and in the return dM/dr
 
     We need to pass args as an explicit argument because closures do not work with numba
     """
@@ -27,10 +35,13 @@ def he_derivs(r: float, y: NDArray, args: Dargs) -> NDArray:
     M_old, sig_old, r_s, rho_s = args
 
     # Linear interpolation
+    # print("DERIVS:", P, M)
+    # print(M_old)
+    # print(sig_old)
     sig = num_utils.linear_spline(M, x_dat=M_old, y_dat=sig_old)
 
     g = -nfw_potential_gradient_scalar(r, r_s=r_s, rho_s=rho_s)
-    rho = (P / sig) ** (1 / cst.gamma)
+    rho = (cst.C2 * P / sig) ** (1 / cst.gamma)
     return np.array([g * rho * cst.C4, 4.0 * np.pi * r**2 * rho * cst.C5])
 
 
@@ -44,28 +55,36 @@ def he_to_solve(P0: float, i_args: Iargs):
     P_found = y[-1][0]
     return P_found - P_inf
 
+def print_types(**kwargs):
+    for name, arg in kwargs.items():
+        print(f"{name}: {type(arg)}")
+    print("-------------")
+
 
 def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArray, r_s: float, rho_s: float, M_tot: float, P_inf: float):
     """
     Integrate Hydrostatic Equilibrium together with Mass Shells using a shooting method:
     to satisfy P(R(M_tot)) = P_inf & M(0) = 0
     """
-    # TODO: specify these values
-    atol = 0
-    rtol = 1e-4
+    # Tolerances for the stepping algorithm
+    atol = P_inf / 1e8
+    rtol = 0 #np.float64(1e-8)
 
-    dargs = (M, sig, r_s, rho_s)
-    x0 = 0
-    h0 = 1  # UNIT: pc
-    i_args = (x0, h0, atol, rtol, he_derivs, dargs, M_tot, P_inf)
+    dargs = (M, sig, np.float64(r_s), np.float64(rho_s))
+    x0 = np.float64(0.0)
+    h0 = np.float64(1.0)  # UNIT: pc
+    i_args = (x0, h0, atol, rtol, he_derivs, dargs, np.float64(M_tot), np.float64(P_inf))
 
     # Arguments for the bisect
-    bound = 100
-    a = P0_initial / bound
-    b = P0_initial * bound
-    x_tol = P_inf / 1e4  # TODO: Can just set a number as well ?
+    bound = 100.0
+    a = np.float64(P0_initial) / bound
+    b = np.float64(P0_initial) * bound
+    x_tol = np.float64(1e-10)  # TODO: Verify what is needed!
+    y_tol = np.float64(P_inf) / 1e6
 
-    P0 = num_utils.bisect(he_to_solve, args=i_args, a=a, b=b, x_tol=x_tol)
+    if debug.LOG_LEVEL <= debug.INFO:
+        print_types(he_to_solve=he_to_solve, args=i_args, a=a, b=b, x_tol=x_tol, y_tol=y_tol)
+    P0 = num_utils.bisect(he_to_solve, args=i_args, a=a, b=b, x_tol=x_tol, y_tol=y_tol)
     x, y = stepper_dopr_853_hydrostat(P0, i_args)
 
     x_ret = np.array(x)
@@ -73,6 +92,14 @@ def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArra
 
     return x_ret, y_ret
 
+
+@numba.jit(nopython=True, cache=True)
+def interpol_mass_difference(x_guess: float, args):
+    """
+    Helper function which gives the difference to M_tot using the interpolated values.
+    """
+    x, h, M_tot, rcont = args
+    return evaluate_dense(x=x_guess, xold=x, h=h, rcont=rcont)[1] - M_tot
 
 @numba.jit(nopython=True, cache=True)
 def stepper_dopr_853_hydrostat(P0: float, i_args: Iargs) -> tuple[list[float], list[NDArray]]:
@@ -84,7 +111,7 @@ def stepper_dopr_853_hydrostat(P0: float, i_args: Iargs) -> tuple[list[float], l
     # x0: float, h0: float, atol: float, rtol: float, derivs: Dfunc, dargs: Dargs, M_tot: float
     x0, h0, atol, rtol, derivs, dargs, M_tot, P_inf = i_args
     x = x0
-    y = np.array([P0, 0])
+    y = np.array([P0, 0.0])
     h = h0
     errold = 1e-4
 
@@ -92,31 +119,33 @@ def stepper_dopr_853_hydrostat(P0: float, i_args: Iargs) -> tuple[list[float], l
     ys = [y]
     xs = [x]
 
-    print("Starting the integration!")
+    debug.log_debug("Starting the integration!")
     while True:
+        debug.log_debugv("STEP:", x, h, y)
         xnew, yout, dydxnew, hnext, errold, ks = step(x=x, y=y, dydx=dydx, h_try=h, derivs=derivs, dargs=dargs, atol=atol, rtol=rtol, errold=errold)
 
         # Stopping condition
         if yout[1] > M_tot:
+            debug.log_debug("Stopping and finding root")
+#             print("BEFORE: ", x, x+h)
             rcont = prepare_dense(h=h, x=x, y=y, yout=yout, dydx=dydx, dydxnew=dydxnew, ks=ks, derivs=derivs, dargs=dargs)
+#             print("RC", rcont)
 
-            def cubic_interp(x_guess: float, args):
-                x, h, rcont = args
-                return evaluate_dense(x=x_guess, xold=x, h=h, rcont=rcont)[0]
-
-            x_root = num_utils.find_root_secant(cubic_interp, a=x, b=x + h, args=(x, h, rcont))
-
-            y_ins = np.zeros_like(y)
-            y_ins[0] = M_tot
-
+            # TODO: specify x_tol, y_tol
+            x_root = num_utils.find_root_secant(interpol_mass_difference, a=x, b=x + h, args=(x, h, M_tot, rcont), x_tol=1e-10, y_tol=M_tot / 1e6)
+            y_ins = evaluate_dense(x=x_root, xold=x, h=h, rcont=rcont)
+            #y_ins[1] = M_tot # Set the mass to this value, since that is what we are searching for.
+#             print("ROOT:", x, x_root, h, "gives:", y_ins)
+            
             xs.append(x_root)
             ys.append(y_ins)
             break
 
-        if yout[0] < P_inf / 1e3:
+        if yout[0] < (P_inf / 1e3):
+            debug.log_warn("Pressure low, stopping early")
             # The Pressure is too low already, just stop.
-            xs.append(x)
-            ys.append(y)
+            xs.append(xnew)
+            ys.append(yout)
             break
 
         h = hnext
@@ -131,8 +160,6 @@ def stepper_dopr_853_hydrostat(P0: float, i_args: Iargs) -> tuple[list[float], l
     return xs, ys
 
 
-Klist = tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
-RcontList = tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
 EPS = 1e-16  # TODO: specify
 
 
@@ -146,9 +173,11 @@ def step(x: float, y: NDArray, dydx: NDArray, h_try: float, derivs: Dfunc, dargs
         yout, yerr, yerr2, ks = dy(x=x, y=y, dydx=dydx, h=h, derivs=derivs, dargs=dargs)
         err = error(h=h, atol=atol, rtol=rtol, yerr=yerr, yerr2=yerr2, y=y, yout=yout)
         success, h, hnext, errold, reject = controller_success(err, errold, h, reject)
-        print(success, h, hnext, errold, reject, x / cst.pc_to_cm, y[0], y[1] / cst.solmass)
+        debug.log_debugvv("INDv. STEP:", success, h, hnext, errold, reject, x,  y)
         if success:
             break
+        if np.isnan(h): 
+            raise ValueError("stepsize is NAN, exiting...")
         if np.abs(h) <= np.abs(x) * EPS:
             raise ValueError("stepsize underflow in integration")
     dydxnew = derivs(x + h, yout, dargs)

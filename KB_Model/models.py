@@ -3,7 +3,7 @@ import numba
 import numpy as np
 
 
-@numba.jit(nopython=True)
+@numba.jit(nopython=True, cache=True)
 def nfw_potential_gradient(r, r_s, rho_s):
     potential_gradient = np.empty_like(r)
 
@@ -15,7 +15,7 @@ def nfw_potential_gradient(r, r_s, rho_s):
     return potential_gradient
 
 
-@numba.jit(nopython=True)
+@numba.jit(nopython=True, cache=True)
 def nfw_potential_gradient_scalar(r, r_s, rho_s):
     """
     Only works for r being a scalar
