@@ -5,8 +5,13 @@ from scipy.interpolate import RegularGridInterpolator
 
 
 class CloudyCoolingFunc:
-    def __init__(self, data_location="./FinalTable.txt"):
-        interp_funcs, axes = CloudyCoolingFunc.create_cloudy_interp(data_location)
+    """
+    Class for reading and interpolating Cloudy cooling function tables
+
+    Written by Sten Sipma
+    """
+    def __init__(self, data_location="./FinalTable.txt", interp_method='cubic'):
+        interp_funcs, axes = CloudyCoolingFunc.create_cloudy_interp(data_location, interp_method=interp_method)
 
         # Unpack
         self.heating_int, self.cooling_int, self.rho_int, self.mol_weight_int = interp_funcs
@@ -21,9 +26,9 @@ class CloudyCoolingFunc:
         quantities at these N points.
 
         Returns:
-            - Heating
-            - Cooling
-            - Rho
+            - Heating (erg cm3 / s)
+            - Cooling (erg cm3 / s)
+            - Rho (g)
             - Molecular Weight
         """
         return self.heating(n_H, Z, T), self.cooling(n_H, Z, T), self.rho(n_H, Z, T), self.mol_weight(n_H, Z, T)
@@ -48,7 +53,7 @@ class CloudyCoolingFunc:
         return interp(test_points)
 
     @staticmethod
-    def create_cloudy_interp(data_location):
+    def create_cloudy_interp(data_location, interp_method='cubic'):
         table_location = Path(data_location)
         data = np.loadtxt(table_location, comments="#")
 
@@ -59,8 +64,10 @@ class CloudyCoolingFunc:
         shape = (dim_n_H, dim_Z, dim_T)
 
         # All the data as a cube
-        n_H = data[:, 0].reshape(shape)
-        Z = data[:, 1].reshape(shape)
+        # TRANSFORM: n_h -> linear space
+        #            Z   -> linear space
+        n_H = 10.**data[:, 0].reshape(shape)
+        Z = 10.**data[:, 1].reshape(shape)
         T = data[:, 2].reshape(shape)
         heating = data[:, 3].reshape(shape)
         cooling = data[:, 4].reshape(shape)
@@ -74,10 +81,10 @@ class CloudyCoolingFunc:
 
         axes = (n_H_ax, Z_ax, T_ax)
 
-        heating_interp = RegularGridInterpolator(axes, heating)
-        cooling_interp = RegularGridInterpolator(axes, cooling)
-        rho_interp = RegularGridInterpolator(axes, rho)
-        mol_weight_interp = RegularGridInterpolator(axes, mol_weight)
+        heating_interp = RegularGridInterpolator(axes, heating, method=interp_method)
+        cooling_interp = RegularGridInterpolator(axes, cooling, method=interp_method)
+        rho_interp = RegularGridInterpolator(axes, rho, method=interp_method)
+        mol_weight_interp = RegularGridInterpolator(axes, mol_weight, method=interp_method)
 
         return (heating_interp, cooling_interp, rho_interp, mol_weight_interp), (n_H_ax, Z_ax, T_ax)
 

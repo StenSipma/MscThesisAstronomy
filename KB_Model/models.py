@@ -26,3 +26,7 @@ def nfw_potential_gradient_scalar(r, r_s, rho_s):
     else:
         potential_gradient = -16 * np.pi * cst.G * rho_s * r_s * ((x / (1 + x) - np.log(1 + x)) / x**2)
     return potential_gradient
+
+@numba.jit(nopython=True, cache=True)
+def beta_model(r, n0, rc, beta):
+    return n0*(1 + (r/rc)**2)**(-3*beta / 2)

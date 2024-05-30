@@ -23,6 +23,7 @@ LEN_UNIT = pc_to_cm       # cm
 DENS_UNIT = proton_mass   # g / cm3
 NDENS_UNIT = 1            # 1 / cm3
 TIME_UNIT = u.Myr.to("s") # s
+VEL_UNIT = u.km.to("cm") / u.s.to("s") # s
 
 # Ideal gas law
 C1 = k_B * (NDENS_UNIT * TEMP_UNIT / PRES_UNIT)
@@ -39,6 +40,9 @@ C4 = DENS_UNIT**2 * LEN_UNIT**2 / PRES_UNIT
 # mass shells
 C5 = DENS_UNIT * LEN_UNIT ** 3 / MASS_UNIT
 
+# inflow velocity
+C6 = MASS_UNIT / (VEL_UNIT * TIME_UNIT * LEN_UNIT **2 * DENS_UNIT)
+
 if __name__ == '__main__':
     print("Constants for calculations:")
     print(f"| {C1 = :.8e}")
@@ -46,3 +50,4 @@ if __name__ == '__main__':
     print(f"| {C3 = :.8e}")
     print(f"| {C4 = :.8e}")
     print(f"| {C5 = :.8e}")
+    print(f"| {C6 = :.8e}")

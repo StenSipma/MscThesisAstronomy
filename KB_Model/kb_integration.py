@@ -21,18 +21,19 @@ Klist = None #tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArra
 RcontList = None #tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
 
 DEBUG = True
+from numba import optional
 
-@numba.jit(nopython=True, cache=True)
-def he_derivs(r: float, y: NDArray, args: Dargs) -> NDArray:
+@numba.jit("float64[:](float64, float64[:], float64[:], float64[:], float64, float64)", nopython=True, cache=True)
+def he_derivs_inner(r: float, y: NDArray, M_old, sig_old, r_s, rho_s):
     """
     Derivatives of the equation to be integrated:
         y[0] P and in the return dP/dr
         y[1] M and in the return dM/dr
 
-    We need to pass args as an explicit argument because closures do not work with numba
+    We need to pass dargs as an explicit argument because closures do not work with numba
     """
     P, M = y
-    M_old, sig_old, r_s, rho_s = args
+#    M_old, sig_old, r_s, rho_s = dargs
 
     # Linear interpolation
     # print("DERIVS:", P, M)
@@ -43,6 +44,19 @@ def he_derivs(r: float, y: NDArray, args: Dargs) -> NDArray:
     g = -nfw_potential_gradient_scalar(r, r_s=r_s, rho_s=rho_s)
     rho = (cst.C2 * P / sig) ** (1 / cst.gamma)
     return np.array([g * rho * cst.C4, 4.0 * np.pi * r**2 * rho * cst.C5])
+
+@numba.jit(nopython=True, cache=True)
+def he_derivs(r: float, y: NDArray, dargs: Dargs) -> NDArray:
+    """
+    Derivatives of the equation to be integrated:
+        y[0] P and in the return dP/dr
+        y[1] M and in the return dM/dr
+
+    We need to pass dargs as an explicit argument because closures do not work with numba
+    """
+#    P, M = y
+    M_old, sig_old, r_s, rho_s = dargs
+    return he_derivs_inner(r, y, M_old, sig_old, r_s, rho_s) 
 
 
 @numba.jit(nopython=True, cache=True)
@@ -61,18 +75,18 @@ def print_types(**kwargs):
     print("-------------")
 
 
-def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArray, r_s: float, rho_s: float, M_tot: float, P_inf: float):
+def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArray, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float=1.0):
     """
     Integrate Hydrostatic Equilibrium together with Mass Shells using a shooting method:
     to satisfy P(R(M_tot)) = P_inf & M(0) = 0
     """
     # Tolerances for the stepping algorithm
-    atol = P_inf / 1e8
+    atol = P0_initial * 1e-12
     rtol = 0 #np.float64(1e-8)
 
     dargs = (M, sig, np.float64(r_s), np.float64(rho_s))
     x0 = np.float64(0.0)
-    h0 = np.float64(1.0)  # UNIT: pc
+    h0 = np.float64(h0)  # UNIT: pc
     i_args = (x0, h0, atol, rtol, he_derivs, dargs, np.float64(M_tot), np.float64(P_inf))
 
     # Arguments for the bisect
@@ -80,9 +94,11 @@ def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArra
     a = np.float64(P0_initial) / bound
     b = np.float64(P0_initial) * bound
     x_tol = np.float64(1e-10)  # TODO: Verify what is needed!
+#     y_tol = np.float64(P_inf) / 1e6
     y_tol = np.float64(P_inf) / 1e6
 
-    if debug.LOG_LEVEL <= debug.INFO:
+    debug.log_info("Starting integration")
+    if debug.LOG_LEVEL <= debug.DEBUG:
         print_types(he_to_solve=he_to_solve, args=i_args, a=a, b=b, x_tol=x_tol, y_tol=y_tol)
     P0 = num_utils.bisect(he_to_solve, args=i_args, a=a, b=b, x_tol=x_tol, y_tol=y_tol)
     x, y = stepper_dopr_853_hydrostat(P0, i_args)
