@@ -10,8 +10,11 @@ def nfw_potential_gradient(r, r_s, rho_s):
     x = r / r_s
     approx = x < 0.005
     # Taylor approx for small x
-    potential_gradient[approx] = -16 * np.pi * cst.G * rho_s * r_s * (-1 / 2 + (2 / 3) * x - (3 / 4) * x * x)
-    potential_gradient[~approx] = -16 * np.pi * cst.G * rho_s * r_s * ((x / (1 + x) - np.log(1 + x)) / x**2)
+    x_approx = x[approx]
+    potential_gradient[approx] = -16 * np.pi * cst.G * rho_s * r_s * (-1 / 2 + (2 / 3) * x_approx - (3 / 4) * x_approx * x_approx)
+
+    nx_approx = x[~approx]
+    potential_gradient[~approx] = -16 * np.pi * cst.G * rho_s * r_s * ((nx_approx / (1 + nx_approx) - np.log(1 + nx_approx)) / nx_approx**2)
     return potential_gradient
 
 

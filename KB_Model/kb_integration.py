@@ -75,6 +75,28 @@ def print_types(**kwargs):
     print("-------------")
 
 
+def integrate_he(P0_initial: float, M, sig, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float = 1.0):
+    """
+    Just a wrapper around stepper_dopr_853_hydrostat which is a bit more convenient to use than
+    the stepper_dopr interface.
+    """
+    # Tolerances for the stepping algorithm
+    atol = P0_initial * 1e-12
+    rtol = 0 #np.float64(1e-8)
+
+    dargs = (M, sig, np.float64(r_s), np.float64(rho_s))
+    x0 = np.float64(0.0)
+    h0 = np.float64(h0)  # UNIT: pc
+    i_args = (x0, h0, atol, rtol, he_derivs, dargs, np.float64(M_tot), np.float64(P_inf))
+
+    # Actual integration
+    x, y = stepper_dopr_853_hydrostat(P0_initial, i_args)
+
+    x_ret = np.array(x)
+    y_ret = np.vstack(y)
+
+    return x_ret, y_ret
+
 def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArray, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float=1.0):
     """
     Integrate Hydrostatic Equilibrium together with Mass Shells using a shooting method:

@@ -1,5 +1,6 @@
 import astropy.constants as aconsts
 from astropy import units as u
+import math
 
 # Provide all constants in CGS (without astropy units)
 proton_mass = aconsts.m_p.cgs.value
@@ -43,6 +44,9 @@ C5 = DENS_UNIT * LEN_UNIT ** 3 / MASS_UNIT
 # inflow velocity
 C6 = MASS_UNIT / (VEL_UNIT * TIME_UNIT * LEN_UNIT **2 * DENS_UNIT)
 
+# sound speed
+C7 = math.sqrt( k_B * TEMP_UNIT / proton_mass ) /  VEL_UNIT
+
 if __name__ == '__main__':
     print("Constants for calculations:")
     print(f"| {C1 = :.8e}")
@@ -51,3 +55,4 @@ if __name__ == '__main__':
     print(f"| {C4 = :.8e}")
     print(f"| {C5 = :.8e}")
     print(f"| {C6 = :.8e}")
+    print(f"| {C7 = :.8e}")

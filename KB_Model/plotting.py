@@ -35,7 +35,7 @@ def full_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbow', 
     else:
         selected = result[1]
 
-    ts, rs, ps, ms, ss = selected
+    ts, rs, ps, ms, ss, tcs = selected
 
     figax = None
     
@@ -44,7 +44,7 @@ def full_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbow', 
     mapper = ScalarMappable(norm=norm, cmap=cmap)
     
     figax = plt.subplots(3, 2, figsize=(2*3.5, 3*3.5), sharex=True)
-    for t, r, p, m, s in zip(*selected):
+    for t, r, p, m, s, tcs in zip(*selected):
         color = mapper.to_rgba(t)
         figax = full_plot(r, p, m, s, param=param, figax=figax, options={'ls': ':', 'label': f"{t:.0f} Myr", 'color': color})
         fig, ax = figax
@@ -77,7 +77,7 @@ def recreate_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbo
     else:
         selected = result[1]
 
-    ts, rs, ps, ms, ss = selected
+    ts, rs, ps, ms, ss, tcs = selected
 
     cmap = colormaps[time_cmap].resampled(64)
     norm = Normalize(vmin=ts.min(), vmax=ts.max())
@@ -85,7 +85,7 @@ def recreate_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbo
     
     figax = plt.subplots(2, 2, figsize=(2*4.5, 2*3.5))
     
-    for t, r, p, m, s in zip(*selected):
+    for t, r, p, m, s, tc in zip(*selected):
         color = mapper.to_rgba(t)
         figax = recreate_plot(r, p, m, s, param=param, figax=figax, temp_unit='K', options={'ls': ':', 'label': f"{t:.0f} Myr", 'color': color}, **kwargs)
         fig, ax = figax
