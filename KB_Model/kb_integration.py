@@ -58,7 +58,6 @@ def he_derivs(r: float, y: NDArray, dargs: Dargs) -> NDArray:
     M_old, sig_old, r_s, rho_s = dargs
     return he_derivs_inner(r, y, M_old, sig_old, r_s, rho_s) 
 
-
 @numba.jit(nopython=True, cache=True)
 def he_to_solve(P0: float, i_args: Iargs):
     x0, h0, atol, rtol, derivs, dargs, M_tot, P_inf = i_args
@@ -73,7 +72,6 @@ def print_types(**kwargs):
     for name, arg in kwargs.items():
         print(f"{name}: {type(arg)}")
     print("-------------")
-
 
 def integrate_he(P0_initial: float, M, sig, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float = 1.0):
     """
@@ -129,6 +127,34 @@ def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArra
     y_ret = np.vstack(y)
 
     return x_ret, y_ret
+
+@numba.jit(nopython=True)
+def equalize_entropy(sig, T, M):
+    all_good = True
+    while all_good:  # Keep looping until everything is flat.
+        all_good = False
+        s_prev = sig[0]
+        for i, s in enumerate(sig[1:], 1):
+            if s_prev > s:
+                all_good = True
+                # Instabiel, zei de kat
+                start = i - 1
+
+                # Sum variables
+                sTM = 0
+                TM = 0
+                for j, s_next in enumerate(sig[i:]):
+                    if s_next >= s_prev:
+                        end = j
+                        break
+                    sTM += s_next*T[j]*M[j]
+                    TM += T[j]*M[j]
+                else:
+                    end = len(sig)
+                smean = sTM / TM
+
+                sig[start:end] = smean
+            s_prev = s
 
 
 @numba.jit(nopython=True, cache=True)
