@@ -46,7 +46,7 @@ def full_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbow', 
     figax = plt.subplots(3, 2, figsize=(2*3.5, 3*3.5), sharex=True)
     for t, r, p, m, s, tcs in zip(*selected):
         color = mapper.to_rgba(t)
-        figax = full_plot(r, p, m, s, param=param, figax=figax, options={'ls': ':', 'label': f"{t:.0f} Myr", 'color': color})
+        figax = full_plot(r, p, m, s, param=param, figax=figax, options={'label': f"{t:.0f} Myr", 'color': color})
         fig, ax = figax
     
     # Add the colourbar
@@ -87,7 +87,7 @@ def recreate_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbo
     
     for t, r, p, m, s, tc in zip(*selected):
         color = mapper.to_rgba(t)
-        figax = recreate_plot(r, p, m, s, param=param, figax=figax, temp_unit='K', options={'ls': ':', 'label': f"{t:.0f} Myr", 'color': color}, **kwargs)
+        figax = recreate_plot(r, p, m, s, param=param, figax=figax, temp_unit='K', options={'label': f"{t:.0f} Myr", 'color': color}, **kwargs)
         fig, ax = figax
         
     sig0 = [s[0] for s in ss]
