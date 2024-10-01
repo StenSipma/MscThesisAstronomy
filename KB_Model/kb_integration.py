@@ -14,7 +14,7 @@ Dargs = None # tuple[NDArray, NDArray, float, float]
 Dfunc = None # Callable[[float, NDArray, Dargs], NDArray]
 
 # Arguments needed for integration
-Iargs = None #tuple[float, float, float, float, Dfunc, Dargs, float, float]
+Iargs = None #tuple[float, float, float, float, float, Dfunc, Dargs, float, float]
 
 # List of np arrays storing the k values
 Klist = None #tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]
@@ -60,10 +60,9 @@ def he_derivs(r: float, y: NDArray, dargs: Dargs) -> NDArray:
 
 @numba.jit(nopython=True, cache=True)
 def he_to_solve(P0: float, i_args: Iargs):
-    x0, h0, atol, rtol, derivs, dargs, M_tot, P_inf = i_args
+    x0, h0, M0, atol, rtol, derivs, dargs, M_tot, P_inf = i_args
 
     _, y = stepper_dopr_853_hydrostat(P0, i_args)
-    # TODO: check if early return gives the same thing...
     # Take last iteration (-1) and then P component (0)
     P_found = y[-1][0]
     return P_found - P_inf
@@ -73,19 +72,19 @@ def print_types(**kwargs):
         print(f"{name}: {type(arg)}")
     print("-------------")
 
-def integrate_he(P0_initial: float, M, sig, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float = 1.0):
+def integrate_he(P0_initial: float, M, sig, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float = 1.0, r0: float=0.0, M0: float=0.0):
     """
     Just a wrapper around stepper_dopr_853_hydrostat which is a bit more convenient to use than
     the stepper_dopr interface.
     """
     # Tolerances for the stepping algorithm
     atol = P0_initial * 1e-12
-    rtol = 0 #np.float64(1e-8)
+    rtol = 0.0 #np.float64(1e-8)
 
     dargs = (M, sig, np.float64(r_s), np.float64(rho_s))
-    x0 = np.float64(0.0)
+    x0 = np.float64(r0)  # UNIT: pc
     h0 = np.float64(h0)  # UNIT: pc
-    i_args = (x0, h0, atol, rtol, he_derivs, dargs, np.float64(M_tot), np.float64(P_inf))
+    i_args = (x0, h0, np.float64(M0), atol, rtol, he_derivs, dargs, np.float64(M_tot), np.float64(P_inf))
 
     # Actual integration
     x, y = stepper_dopr_853_hydrostat(P0_initial, i_args)
@@ -95,19 +94,21 @@ def integrate_he(P0_initial: float, M, sig, r_s: float, rho_s: float, M_tot: flo
 
     return x_ret, y_ret
 
-def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArray, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float=1.0):
+def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArray, r_s: float, rho_s: float, M_tot: float, P_inf: float, h0: float=1.0, r0: float=0.0, M0: float=0.0):
     """
     Integrate Hydrostatic Equilibrium together with Mass Shells using a shooting method:
     to satisfy P(R(M_tot)) = P_inf & M(0) = 0
     """
     # Tolerances for the stepping algorithm
     atol = P0_initial * 1e-12
-    rtol = 0 #np.float64(1e-8)
+    rtol = 0.0 #np.float64(1e-8)
 
     dargs = (M, sig, np.float64(r_s), np.float64(rho_s))
-    x0 = np.float64(0.0)
+    x0 = np.float64(r0)
     h0 = np.float64(h0)  # UNIT: pc
-    i_args = (x0, h0, atol, rtol, he_derivs, dargs, np.float64(M_tot), np.float64(P_inf))
+    i_args = (x0, h0, np.float64(M0), atol, rtol, he_derivs, dargs, np.float64(M_tot), np.float64(P_inf))
+    if debug.LOG_LEVEL <= debug.DEBUG:
+        print_types(x0=x0, h0=h0, M0=M0, atol=atol, rtol=rtol, he_derivs=he_derivs, dargs=dargs, M_tot=np.float64(M_tot), P_inf=np.float64(P_inf))
 
     # Arguments for the bisect
     bound = 100.0
@@ -128,34 +129,6 @@ def integrate_hydrostatic_equilibrium(P0_initial: float, M: NDArray, sig: NDArra
 
     return x_ret, y_ret
 
-@numba.jit(nopython=True)
-def equalize_entropy(sig, T, M):
-    all_good = True
-    while all_good:  # Keep looping until everything is flat.
-        all_good = False
-        s_prev = sig[0]
-        for i, s in enumerate(sig[1:], 1):
-            if s_prev > s:
-                all_good = True
-                # Instabiel, zei de kat
-                start = i - 1
-
-                # Sum variables
-                sTM = 0
-                TM = 0
-                for j, s_next in enumerate(sig[i:]):
-                    if s_next >= s_prev:
-                        end = j
-                        break
-                    sTM += s_next*T[j]*M[j]
-                    TM += T[j]*M[j]
-                else:
-                    end = len(sig)
-                smean = sTM / TM
-
-                sig[start:end] = smean
-            s_prev = s
-
 
 @numba.jit(nopython=True, cache=True)
 def interpol_mass_difference(x_guess: float, args):
@@ -172,13 +145,14 @@ def stepper_dopr_853_hydrostat(P0: float, i_args: Iargs) -> tuple[list[float], l
         - P(r)   (= y[0])
         - M(r)   (= y[1])
     """
-    # x0: float, h0: float, atol: float, rtol: float, derivs: Dfunc, dargs: Dargs, M_tot: float
-    x0, h0, atol, rtol, derivs, dargs, M_tot, P_inf = i_args
+    # x0: float, h0: float, M0: float, atol: float, rtol: float, derivs: Dfunc, dargs: Dargs, M_tot: float
+    x0, h0, M0, atol, rtol, derivs, dargs, M_tot, P_inf = i_args
     x = x0
-    y = np.array([P0, 0.0])
+    y = np.array([P0, M0])
     h = h0
     errold = 1e-4
 
+    debug.log_debug("Initial conditions: x =", x, "y = ", y)
     dydx = derivs(x, y, dargs)
     ys = [y]
     xs = [x]

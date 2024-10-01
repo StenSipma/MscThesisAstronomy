@@ -27,11 +27,15 @@ def full_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbow', 
     param, _ = result
 
     if plot_mask is not None:
-        selected = [q[plot_mask] for q in result[1]]
+        selected = [ [qi for qi, m in zip(quantity, plot_mask) if m] for quantity in result[1] ]
+        selected[0] = t[plot_mask]
     elif plot_times is not None:
         t = result[1][0]
         plot_mask = index_closest(t, plot_times)
-        selected = [q[plot_mask] for q in result[1]]
+        selected = [
+            [qi for qi, m in zip(quantity, plot_mask) if m] for quantity in result[1]
+        ]
+        selected[0] = t[plot_mask]
     else:
         selected = result[1]
 
@@ -67,13 +71,15 @@ def recreate_plot_all(result, plot_mask=None, plot_times=None, time_cmap='rainbo
     cmap = colormaps[time_cmap].resampled(8)
 
     if plot_mask is not None:
-        selected = [result[1][0][plot_mask]] + [q[plot_mask] for q in result[1][1:]]
-        # TODO: change to double for loop? [q_i for q_i, incl in zip(q, plot_mask) if incl]
+        selected = [ [qi for qi, m in zip(quantity, plot_mask) if m] for quantity in result[1] ]
+        selected[0] = t[plot_mask]
     elif plot_times is not None:
         t = result[1][0]
         plot_mask = index_closest(t, plot_times)
-        #selected = [q[plot_mask] for q in result[1]]
-        selected = [result[1][0][plot_mask]] + [q[plot_mask] for q in result[1][1:]]
+        selected = [
+            [qi for qi, m in zip(quantity, plot_mask) if m] for quantity in result[1]
+        ]
+        selected[0] = t[plot_mask]
     else:
         selected = result[1]
 

@@ -33,6 +33,7 @@ class Parameters:
     # Entropy profile
     M: np.ndarray
     sig: np.ndarray
+    r: np.ndarray
         
     def nfw_param(self):
         return (self.r_s, self.rho_s)
